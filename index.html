@@ -2,48 +2,55 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>筋トレ記録グラフ付き</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
       font-family: sans-serif;
-      padding: 20px;
+      padding: 10px;
       background: #f9f9f9;
     }
     h1 {
       color: #333;
+      font-size: 1.5rem;
+      text-align: center;
     }
     #chart-container {
       width: 100%;
-      max-width: 800px;
-      margin: 20px auto;
+      max-width: 100%;
+      overflow-x: auto;
+      margin-top: 20px;
     }
     .form-section {
       background: white;
-      padding: 20px;
+      padding: 15px;
       border-radius: 10px;
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
       margin-top: 20px;
     }
     .exercise-entry {
       display: flex;
-      align-items: center;
-      margin-bottom: 10px;
-      flex-wrap: wrap;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 15px;
     }
-    .exercise-entry select,
     .exercise-entry input[type='number'],
     .exercise-entry input[type='text'] {
-      margin-right: 10px;
-      margin-top: 5px;
+      padding: 8px;
+      font-size: 1rem;
+      width: 100%;
     }
     .calendar-input, .range-selectors {
       margin-bottom: 10px;
     }
     .btn {
-      padding: 5px 10px;
-      margin: 0 5px 5px 0;
+      padding: 10px;
+      margin: 5px 5px 0 0;
+      font-size: 1rem;
       cursor: pointer;
+      border: none;
+      border-radius: 5px;
     }
     .btn-add {
       background-color: #4caf50;
@@ -53,10 +60,16 @@
       background-color: #f44336;
       color: white;
     }
-    .description {
-      font-size: 0.8rem;
-      color: #666;
-      margin-right: 10px;
+    .checkbox-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      max-height: 200px;
+      overflow-y: auto;
+      margin-bottom: 10px;
+    }
+    label.checkbox-item {
+      font-size: 1rem;
     }
   </style>
   <link rel="manifest" href="manifest.json">
@@ -77,11 +90,11 @@
   </div>
 
   <div class="form-section">
-    <label for="exercise-select">トレーニング種目のグラフ表示（複数選択可）：</label>
-    <select id="exercise-select" multiple size="10"></select>
+    <label>トレーニング種目のグラフ表示：</label>
+    <div id="exercise-checkboxes" class="checkbox-list"></div>
 
     <div class="range-selectors">
-      <label>範囲選択：</label>
+      <label>範囲選択：</label><br>
       <button onclick="setRangeDays(7)">直近1週間</button>
       <button onclick="setRangeDays(30)">直近1か月</button>
       <input type="month" id="monthPicker" onchange="setMonthRange()">
@@ -98,28 +111,30 @@
 
   <script>
     const exercises = [
-      { id: "pushup", name: "腕立て伏せ", description: "胸と腕を鍛える自重トレーニング" },
-      { id: "squat", name: "スクワット", description: "脚・お尻を鍛える基本トレーニング" },
-      { id: "plank", name: "プランク", description: "体幹を鍛える静的トレーニング" },
-      { id: "abroller", name: "アブローラー", description: "腹筋を鍛えるローラー運動" },
-      { id: "cycling", name: "サイクリング", description: "有酸素運動・足の筋持久力向上" },
-      { id: "lowerabs", name: "下腹", description: "下腹部を中心とした腹筋運動" },
-      { id: "sideabs", name: "横腹", description: "腹斜筋を鍛える運動" },
-      { id: "walking", name: "ウォーキング", description: "軽めの有酸素運動" },
-      { id: "jogging", name: "ジョギング", description: "中程度の有酸素運動" },
-      { id: "crosstrainer", name: "クロストレーナー", description: "全身を使ったフィットネスマシン運動" }
+      { id: "abroller", name: "アブローラー" },
+      { id: "squat", name: "スクワット" },
+      { id: "cycling", name: "サイクリング" },
+      { id: "lowerabs", name: "下腹" },
+      { id: "sideabs", name: "横腹" },
+      { id: "walking", name: "ウォーキング" },
+      { id: "jogging", name: "ジョギング" },
+      { id: "crosstrainer", name: "クロストレーナー" }
     ];
 
-    const exerciseSelect = document.getElementById("exercise-select");
     const calendarInput = document.getElementById("calendar");
     const logForm = document.getElementById("exercise-log-form");
+    const checkboxContainer = document.getElementById("exercise-checkboxes");
     let chartInstance;
 
     exercises.forEach(ex => {
-      const opt = document.createElement("option");
-      opt.value = ex.id;
-      opt.textContent = ex.name;
-      exerciseSelect.appendChild(opt);
+      const label = document.createElement("label");
+      label.className = "checkbox-item";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = ex.id;
+      label.appendChild(input);
+      label.appendChild(document.createTextNode(` ${ex.name}`));
+      checkboxContainer.appendChild(label);
     });
 
     function addExerciseEntry(exerciseId = '', sets = 0, note = '') {
@@ -190,7 +205,6 @@
       const logs = [];
       let date = new Date(startDate);
       const end = new Date(endDate);
-
       while (date <= end) {
         const dateStr = date.toISOString().slice(0, 10);
         const log = JSON.parse(localStorage.getItem(`log-${dateStr}`)) || [];
@@ -227,7 +241,7 @@
     }
 
     function renderSelectedChart() {
-      const selectedIds = Array.from(exerciseSelect.selectedOptions).map(opt => opt.value);
+      const selectedIds = Array.from(document.querySelectorAll('#exercise-checkboxes input:checked')).map(c => c.value);
       const startDate = document.getElementById('startDate').value;
       const endDate = document.getElementById('endDate').value;
 
