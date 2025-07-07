@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>筋トレ記録グラフ付き</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background: #f9f9f9;
+    }
+    h1 {
+      color: #333;
+    }
+    #chart-container {
+      width: 100%;
+      max-width: 800px;
+      margin: 20px auto;
+    }
+    .form-section {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      margin-top: 20px;
+    }
+    .exercise-entry {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .exercise-entry select,
+    .exercise-entry input[type='number'],
+    .exercise-entry input[type='text'] {
+      margin-right: 10px;
+      margin-top: 5px;
+    }
+    .calendar-input, .range-selectors {
+      margin-bottom: 10px;
+    }
+    .btn {
+      padding: 5px 10px;
+      margin: 0 5px 5px 0;
+      cursor: pointer;
+    }
+    .btn-add {
+      background-color: #4caf50;
+      color: white;
+    }
+    .btn-remove {
+      background-color: #f44336;
+      color: white;
+    }
+    .description {
+      font-size: 0.8rem;
+      color: #666;
+      margin-right: 10px;
+    }
+  </style>
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <h1>筋トレ記録（グラフ付き）</h1>
+
+  <div class="form-section">
+    <label for="calendar">日付を選択：</label>
+    <input type="date" id="calendar" class="calendar-input">
+
+    <div id="exercise-log-form"></div>
+    <button class="btn btn-add" onclick="addExerciseEntry()">＋ 種目を追加</button>
+    <button class="btn" onclick="saveLog()">保存</button>
+    <button class="btn" onclick="exportLogs()">エクスポート</button>
+    <input type="file" id="importFile" style="display:none" accept="application/json">
+    <button class="btn" onclick="document.getElementById('importFile').click()">インポート</button>
+  </div>
+
+  <div class="form-section">
+    <label for="exercise-select">トレーニング種目のグラフ表示（複数選択可）：</label>
+    <select id="exercise-select" multiple size="10"></select>
+
+    <div class="range-selectors">
+      <label>範囲選択：</label>
+      <button onclick="setRangeDays(7)">直近1週間</button>
+      <button onclick="setRangeDays(30)">直近1か月</button>
+      <input type="month" id="monthPicker" onchange="setMonthRange()">
+      <label>または 手動で：</label>
+      <input type="date" id="startDate"> ～
+      <input type="date" id="endDate">
+      <button onclick="renderSelectedChart()">グラフを表示</button>
+    </div>
+
+    <div id="chart-container">
+      <canvas id="weeklyChart"></canvas>
+    </div>
+  </div>
+
+  <script>
+    const exercises = [
+      { id: "pushup", name: "腕立て伏せ", description: "胸と腕を鍛える自重トレーニング" },
+      { id: "squat", name: "スクワット", description: "脚・お尻を鍛える基本トレーニング" },
+      { id: "plank", name: "プランク", description: "体幹を鍛える静的トレーニング" },
+      { id: "abroller", name: "アブローラー", description: "腹筋を鍛えるローラー運動" },
+      { id: "cycling", name: "サイクリング", description: "有酸素運動・足の筋持久力向上" },
+      { id: "lowerabs", name: "下腹", description: "下腹部を中心とした腹筋運動" },
+      { id: "sideabs", name: "横腹", description: "腹斜筋を鍛える運動" },
+      { id: "walking", name: "ウォーキング", description: "軽めの有酸素運動" },
+      { id: "jogging", name: "ジョギング", description: "中程度の有酸素運動" },
+      { id: "crosstrainer", name: "クロストレーナー", description: "全身を使ったフィットネスマシン運動" }
+    ];
+
+    const exerciseSelect = document.getElementById("exercise-select");
+    const calendarInput = document.getElementById("calendar");
+    const logForm = document.getElementById("exercise-log-form");
+    let chartInstance;
+
+    exercises.forEach(ex => {
+      const opt = document.createElement("option");
+      opt.value = ex.id;
+      opt.textContent = ex.name;
+      exerciseSelect.appendChild(opt);
+    });
+
+    function addExerciseEntry(exerciseId = '', sets = 0, note = '') {
+      const entry = document.createElement('div');
+      entry.className = 'exercise-entry';
+
+      const select = document.createElement('select');
+      exercises.forEach(ex => {
+        const opt = document.createElement("option");
+        opt.value = ex.id;
+        opt.textContent = ex.name;
+        if (ex.id === exerciseId) opt.selected = true;
+        select.appendChild(opt);
+      });
+
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.min = '0';
+      input.value = sets;
+
+      const noteInput = document.createElement('input');
+      noteInput.type = 'text';
+      noteInput.placeholder = '補足説明';
+      noteInput.value = note;
+
+      const removeBtn = document.createElement('button');
+      removeBtn.textContent = '－';
+      removeBtn.className = 'btn btn-remove';
+      removeBtn.onclick = () => entry.remove();
+
+      entry.appendChild(select);
+      entry.appendChild(input);
+      entry.appendChild(noteInput);
+      entry.appendChild(removeBtn);
+      logForm.appendChild(entry);
+    }
+
+    function saveLog() {
+      const date = calendarInput.value;
+      if (!date) return alert('日付を選択してください');
+
+      const entries = logForm.querySelectorAll('.exercise-entry');
+      const log = Array.from(entries).map(entry => {
+        return {
+          id: entry.querySelector('select').value,
+          sets: Number(entry.querySelector('input[type="number"]').value),
+          note: entry.querySelector('input[type="text"]').value || ''
+        };
+      });
+
+      localStorage.setItem(`log-${date}`, JSON.stringify(log));
+      alert('保存しました');
+    }
+
+    function loadLog(date) {
+      logForm.innerHTML = '';
+      const log = JSON.parse(localStorage.getItem(`log-${date}`)) || [];
+      log.forEach(e => addExerciseEntry(e.id, e.sets, e.note));
+    }
+
+    calendarInput.addEventListener('change', () => {
+      if (calendarInput.value) {
+        loadLog(calendarInput.value);
+      }
+    });
+
+    function getLogsInRange(startDate, endDate) {
+      const logs = [];
+      let date = new Date(startDate);
+      const end = new Date(endDate);
+
+      while (date <= end) {
+        const dateStr = date.toISOString().slice(0, 10);
+        const log = JSON.parse(localStorage.getItem(`log-${dateStr}`)) || [];
+        logs.push({ date: dateStr, log });
+        date.setDate(date.getDate() + 1);
+      }
+      return logs;
+    }
+
+    function getGraphDataForExercises(exerciseIds, startDate, endDate) {
+      const logs = getLogsInRange(startDate, endDate);
+      const labels = logs.map(entry => {
+        const date = new Date(entry.date);
+        return `${date.getMonth() + 1}/${date.getDate()}`;
+      });
+
+      const datasets = exerciseIds.map((id, index) => {
+        const data = logs.map(entry => {
+          const ex = entry.log.find(l => l.id === id);
+          return ex ? ex.sets : 0;
+        });
+        const color = `hsl(${index * 120}, 70%, 60%)`;
+        return {
+          label: exercises.find(e => e.id === id)?.name || id,
+          data,
+          borderColor: color,
+          backgroundColor: color,
+          fill: false,
+          tension: 0.3
+        };
+      });
+
+      return { labels, datasets };
+    }
+
+    function renderSelectedChart() {
+      const selectedIds = Array.from(exerciseSelect.selectedOptions).map(opt => opt.value);
+      const startDate = document.getElementById('startDate').value;
+      const endDate = document.getElementById('endDate').value;
+
+      if (!selectedIds.length || !startDate || !endDate) {
+        alert("種目・日付範囲をすべて指定してください");
+        return;
+      }
+
+      const ctx = document.getElementById("weeklyChart").getContext("2d");
+      const { labels, datasets } = getGraphDataForExercises(selectedIds, startDate, endDate);
+
+      if (chartInstance) chartInstance.destroy();
+
+      chartInstance = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { stepSize: 1 }
+            }
+          }
+        }
+      });
+    }
+
+    function setRangeDays(days) {
+      const today = new Date();
+      const start = new Date();
+      start.setDate(today.getDate() - days + 1);
+      document.getElementById('startDate').value = start.toISOString().slice(0, 10);
+      document.getElementById('endDate').value = today.toISOString().slice(0, 10);
+    }
+
+    function setMonthRange() {
+      const val = document.getElementById('monthPicker').value;
+      if (!val) return;
+      const [year, month] = val.split('-').map(Number);
+      const tzOffset = (new Date()).getTimezoneOffset() * 60000;
+      const start = new Date(Date.UTC(year, month - 1, 1) - tzOffset);
+      const end = new Date(Date.UTC(year, month, 0) - tzOffset);
+      document.getElementById('startDate').value = start.toISOString().slice(0, 10);
+      document.getElementById('endDate').value = end.toISOString().slice(0, 10);
+    }
+
+    function exportLogs() {
+      try {
+        const logs = {};
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key.startsWith('log-')) {
+            logs[key] = JSON.parse(localStorage.getItem(key));
+          }
+        }
+        const blob = new Blob([JSON.stringify(logs, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'training-logs.json';
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert("エクスポートに失敗しました: " + e.message);
+      }
+    }
+
+    document.getElementById('importFile').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const logs = JSON.parse(event.target.result);
+        for (let key in logs) {
+          localStorage.setItem(key, JSON.stringify(logs[key]));
+        }
+        alert('インポート完了しました');
+        loadLog(calendarInput.value);
+      };
+      reader.readAsText(file);
+    });
+
+    calendarInput.value = new Date().toISOString().slice(0, 10);
+    loadLog(calendarInput.value);
+    setRangeDays(7);
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js');
+      });
+    }
+  </script>
+</body>
+</html>

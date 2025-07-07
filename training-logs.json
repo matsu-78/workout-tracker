@@ -1,0 +1,38 @@
+{
+  "log-2025-07-01": [
+    {
+      "id": "abroller",
+      "sets": 10,
+      "note": ""
+    }
+  ],
+  "log-2025-06-30": [
+    {
+      "id": "squat",
+      "sets": 20,
+      "note": ""
+    },
+    {
+      "id": "abroller",
+      "sets": 20,
+      "note": ""
+    }
+  ],
+  "log-2025-06-28": [
+    {
+      "id": "walking",
+      "sets": 10,
+      "note": ""
+    },
+    {
+      "id": "jogging",
+      "sets": 20,
+      "note": ""
+    },
+    {
+      "id": "crosstrainer",
+      "sets": 35,
+      "note": ""
+    }
+  ]
+}
